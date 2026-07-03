@@ -1,0 +1,20 @@
+{
+  "name": "Colour Snap",
+  "short_name": "Colour Snap",
+  "description": "Turn a photo into a simple colour-by-number canvas.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f2e8",
+  "theme_color": "#16706f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
