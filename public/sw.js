@@ -1,4 +1,4 @@
-const CACHE_NAME = "colour-snap-v1";
+const CACHE_NAME = "colour-snap-v2";
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -24,6 +24,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+          return response;
+        })
+        .catch(() => caches.match("/")),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) {
@@ -40,4 +53,3 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
-

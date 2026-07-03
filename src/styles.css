@@ -118,15 +118,38 @@ h2 {
   display: flex;
   justify-content: center;
   min-height: min(68vh, 760px);
-  overflow: hidden;
+  overflow: auto;
   position: relative;
 }
 
-.canvas-image {
-  display: block;
-  max-height: calc(100vh - 170px);
+.puzzle-grid {
+  aspect-ratio: var(--puzzle-ratio, auto);
+  display: grid;
+  gap: 1px;
+  margin: auto;
+  max-height: calc(100vh - 190px);
   max-width: 100%;
-  object-fit: contain;
+  padding: 8px;
+  width: min(100%, 760px);
+}
+
+.cell {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #ffffff;
+  border: 1px solid rgba(36, 38, 43, 0.2);
+  border-radius: 2px;
+  color: #34373f;
+  display: flex;
+  font-size: clamp(0.62rem, 1.8vw, 0.95rem);
+  font-weight: 800;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0;
+}
+
+.cell.filled {
+  color: transparent;
 }
 
 .empty-state {
@@ -161,6 +184,12 @@ h2 {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 16px;
+}
+
+.control-strip .secondary {
+  background: #ffffff;
+  border: 1px solid rgba(36, 38, 43, 0.18);
+  color: #24262b;
 }
 
 .segmented {
@@ -199,10 +228,17 @@ h2 {
   background: #ffffff;
   border: 1px solid rgba(36, 38, 43, 0.1);
   border-radius: 8px;
+  color: #24262b;
   display: flex;
   gap: 8px;
+  justify-content: flex-start;
   min-height: 44px;
   padding: 6px;
+}
+
+.swatch.selected {
+  border-color: #16706f;
+  box-shadow: 0 0 0 2px rgba(22, 112, 111, 0.18);
 }
 
 .swatch span {
@@ -241,10 +277,15 @@ h2 {
 }
 
 .muted,
-.status {
+.status,
+.hint {
   color: #62666f;
   line-height: 1.45;
   margin: 0;
+}
+
+.hint {
+  margin-top: 10px;
 }
 
 .status {
@@ -272,8 +313,9 @@ h2 {
     min-height: 54vh;
   }
 
-  .canvas-image {
+  .puzzle-grid {
     max-height: 58vh;
+    padding: 6px;
   }
 
   .control-strip > button,
@@ -294,4 +336,3 @@ h2 {
     padding-top: 24px;
   }
 }
-

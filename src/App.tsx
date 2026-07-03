@@ -1,18 +1,19 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import { fileToDataUrl, posterizeImage } from "./imageProcessing";
+import { createPuzzle, fileToDataUrl, renderPuzzleToDataUrl } from "./imageProcessing";
 import { listProjects, saveProject } from "./db";
-import type { PaletteColor, SavedProject } from "./types";
+import type { ColourPuzzle, PaletteColor, SavedProject } from "./types";
 
 const DIFFICULTIES = [
-  { label: "Easy", colors: 8 },
-  { label: "Bright", colors: 12 },
-  { label: "Detailed", colors: 18 },
+  { label: "Easy", columns: 12, colors: 8 },
+  { label: "Bright", columns: 16, colors: 12 },
+  { label: "Detailed", columns: 22, colors: 18 },
 ];
 
 export function App() {
   const [sourceImage, setSourceImage] = useState<string>("");
-  const [posterizedImage, setPosterizedImage] = useState<string>("");
-  const [palette, setPalette] = useState<PaletteColor[]>([]);
+  const [puzzle, setPuzzle] = useState<ColourPuzzle | null>(null);
+  const [filledCells, setFilledCells] = useState<Set<number>>(() => new Set());
+  const [selectedColorId, setSelectedColorId] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState(DIFFICULTIES[0]);
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -22,7 +23,16 @@ export function App() {
     listProjects().then(setProjects).catch(() => setProjects([]));
   }, []);
 
-  const canSave = useMemo(() => Boolean(sourceImage && posterizedImage), [posterizedImage, sourceImage]);
+  const progress = useMemo(() => {
+    if (!puzzle) {
+      return 0;
+    }
+
+    return Math.round((filledCells.size / puzzle.cells.length) * 100);
+  }, [filledCells.size, puzzle]);
+
+  const canSave = Boolean(sourceImage && puzzle);
+  const selectedColor = puzzle?.palette.find((color) => color.id === selectedColorId) ?? null;
 
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -36,7 +46,7 @@ export function App() {
     try {
       const dataUrl = await fileToDataUrl(file);
       setSourceImage(dataUrl);
-      await processImage(dataUrl, difficulty.colors);
+      await processImage(dataUrl, difficulty);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Something went wrong with that photo.");
     } finally {
@@ -45,11 +55,16 @@ export function App() {
     }
   }
 
-  async function processImage(dataUrl: string, colorCount: number) {
-    const processed = await posterizeImage(dataUrl, colorCount);
-    setPosterizedImage(processed.dataUrl);
-    setPalette(processed.palette);
-    setStatus(`Canvas ready with ${processed.palette.length} colours.`);
+  async function processImage(dataUrl: string, nextDifficulty: (typeof DIFFICULTIES)[number]) {
+    const nextPuzzle = await createPuzzle(dataUrl, {
+      columns: nextDifficulty.columns,
+      paletteSize: nextDifficulty.colors,
+    });
+
+    setPuzzle(nextPuzzle);
+    setFilledCells(new Set());
+    setSelectedColorId(nextPuzzle.palette[0]?.id ?? null);
+    setStatus(`Puzzle ready: ${nextPuzzle.cells.length} numbered spaces.`);
   }
 
   async function handleDifficultyChange(nextDifficulty: (typeof DIFFICULTIES)[number]) {
@@ -60,26 +75,48 @@ export function App() {
     }
 
     setIsProcessing(true);
-    setStatus("Rebuilding the canvas...");
+    setStatus("Rebuilding the puzzle...");
     try {
-      await processImage(sourceImage, nextDifficulty.colors);
+      await processImage(sourceImage, nextDifficulty);
     } finally {
       setIsProcessing(false);
     }
   }
 
+  function handleCellClick(index: number) {
+    if (!puzzle || selectedColorId === null) {
+      return;
+    }
+
+    const cell = puzzle.cells[index];
+    if (cell.colorId !== selectedColorId) {
+      setStatus(`That space is number ${cell.colorId}. Choose colour ${cell.colorId} to fill it.`);
+      return;
+    }
+
+    setFilledCells((current) => {
+      const next = new Set(current);
+      next.add(index);
+      return next;
+    });
+    setStatus(`Filled number ${selectedColorId}.`);
+  }
+
   async function handleSave() {
-    if (!canSave) {
+    if (!sourceImage || !puzzle) {
       return;
     }
 
     const now = new Date().toISOString();
+    const filled = Array.from(filledCells);
     const project: SavedProject = {
       id: crypto.randomUUID(),
       title: `Drawing ${projects.length + 1}`,
       imageDataUrl: sourceImage,
-      posterizedDataUrl: posterizedImage,
-      palette,
+      puzzle,
+      filledCells: filled,
+      previewDataUrl: renderPuzzleToDataUrl(puzzle, new Set(filled), false),
+      palette: puzzle.palette,
       createdAt: now,
       updatedAt: now,
     };
@@ -87,24 +124,35 @@ export function App() {
     await saveProject(project);
     const nextProjects = await listProjects();
     setProjects(nextProjects);
-    setStatus("Saved on this device.");
+    setStatus("Progress saved on this device.");
   }
 
   function loadProject(project: SavedProject) {
+    if (!project.puzzle) {
+      setStatus("That saved drawing uses an older format. Please recreate it from the photo.");
+      return;
+    }
+
     setSourceImage(project.imageDataUrl);
-    setPosterizedImage(project.posterizedDataUrl);
-    setPalette(project.palette);
+    setPuzzle(project.puzzle);
+    setFilledCells(new Set(project.filledCells));
+    setSelectedColorId(project.puzzle.palette[0]?.id ?? null);
     setStatus(`${project.title} loaded.`);
   }
 
+  function clearAll() {
+    setFilledCells(new Set());
+    setStatus("Cleared the current puzzle.");
+  }
+
   function exportImage() {
-    if (!posterizedImage) {
+    if (!puzzle) {
       return;
     }
 
     const link = document.createElement("a");
-    link.href = posterizedImage;
-    link.download = "colour-snap-canvas.png";
+    link.href = renderPuzzleToDataUrl(puzzle, filledCells, false);
+    link.download = "colour-snap-finished.png";
     link.click();
   }
 
@@ -123,12 +171,35 @@ export function App() {
         </header>
 
         <div className="canvas-panel">
-          {posterizedImage ? (
-            <img className="canvas-image" src={posterizedImage} alt="Generated colour canvas" />
+          {puzzle ? (
+            <div
+              className="puzzle-grid"
+              style={{
+                gridTemplateColumns: `repeat(${puzzle.columns}, minmax(24px, 1fr))`,
+              }}
+            >
+              {puzzle.cells.map((cell, index) => {
+                const color = puzzle.palette.find((item) => item.id === cell.colorId);
+                const isFilled = filledCells.has(index);
+
+                return (
+                  <button
+                    aria-label={`Cell ${index + 1}, colour ${cell.colorId}`}
+                    className={isFilled ? "cell filled" : "cell"}
+                    key={`${index}-${cell.colorId}`}
+                    style={isFilled && color ? { backgroundColor: color.hex } : undefined}
+                    type="button"
+                    onClick={() => handleCellClick(index)}
+                  >
+                    {!isFilled && cell.colorId}
+                  </button>
+                );
+              })}
+            </div>
           ) : (
             <div className="empty-state">
               <strong>Start with a picture</strong>
-              <span>Pick a photo and this first version will turn it into a simplified colour canvas.</span>
+              <span>Pick a photo and this will turn it into a playable numbered puzzle.</span>
             </div>
           )}
           {isProcessing && <div className="processing">Processing...</div>}
@@ -138,7 +209,7 @@ export function App() {
           <div className="segmented" aria-label="Difficulty">
             {DIFFICULTIES.map((item) => (
               <button
-                className={item.colors === difficulty.colors ? "active" : ""}
+                className={item.columns === difficulty.columns ? "active" : ""}
                 key={item.label}
                 type="button"
                 onClick={() => handleDifficultyChange(item)}
@@ -148,10 +219,13 @@ export function App() {
             ))}
           </div>
           <button type="button" disabled={!canSave} onClick={handleSave}>
-            Save
+            Save progress
           </button>
-          <button type="button" disabled={!posterizedImage} onClick={exportImage}>
-            Export PNG
+          <button type="button" disabled={!puzzle} onClick={exportImage}>
+            Export picture
+          </button>
+          <button className="secondary" type="button" disabled={!puzzle || filledCells.size === 0} onClick={clearAll}>
+            Clear all
           </button>
         </div>
       </section>
@@ -160,17 +234,26 @@ export function App() {
         <section>
           <h2>Palette</h2>
           <div className="palette-grid">
-            {palette.length > 0 ? (
-              palette.map((color) => (
-                <div className="swatch" key={color.id}>
+            {puzzle ? (
+              puzzle.palette.map((color: PaletteColor) => (
+                <button
+                  className={color.id === selectedColorId ? "swatch selected" : "swatch"}
+                  key={color.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedColorId(color.id);
+                    setStatus(`Selected colour ${color.id}.`);
+                  }}
+                >
                   <span style={{ background: color.hex }} />
                   <strong>{color.id}</strong>
-                </div>
+                </button>
               ))
             ) : (
               <p className="muted">Colours will appear after choosing a photo.</p>
             )}
           </div>
+          {selectedColor && <p className="hint">Selected: number {selectedColor.id}</p>}
         </section>
 
         <section>
@@ -179,19 +262,20 @@ export function App() {
             {projects.length > 0 ? (
               projects.map((project) => (
                 <button key={project.id} type="button" onClick={() => loadProject(project)}>
-                  <img src={project.posterizedDataUrl} alt="" />
+                  <img src={project.previewDataUrl || project.imageDataUrl} alt="" />
                   <span>{project.title}</span>
                 </button>
               ))
             ) : (
-              <p className="muted">Saved drawings stay on this device.</p>
+              <p className="muted">Saved progress stays on this device.</p>
             )}
           </div>
         </section>
 
-        <p className="status">{status}</p>
+        <p className="status">
+          {puzzle ? `${progress}% complete. ${status}` : status}
+        </p>
       </aside>
     </main>
   );
 }
-
