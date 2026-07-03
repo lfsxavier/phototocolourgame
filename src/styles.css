@@ -175,6 +175,25 @@ h2 {
   color: #24262b;
 }
 
+.toggle-control {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid rgba(36, 38, 43, 0.16);
+  border-radius: 8px;
+  color: #24262b;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.toggle-control input {
+  accent-color: #16706f;
+  height: 20px;
+  width: 20px;
+}
+
 .segmented {
   background: rgba(36, 38, 43, 0.08);
   border-radius: 8px;
@@ -301,7 +320,8 @@ h2 {
   }
 
   .control-strip > button,
-  .segmented {
+  .segmented,
+  .toggle-control {
     width: 100%;
   }
 

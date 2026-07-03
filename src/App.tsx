@@ -24,6 +24,7 @@ export function App() {
   const [difficulty, setDifficulty] = useState(DIFFICULTIES[0]);
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [useAiDrawing, setUseAiDrawing] = useState(false);
   const [status, setStatus] = useState("Choose a photo to begin.");
 
   useEffect(() => {
@@ -43,7 +44,10 @@ export function App() {
       return 0;
     }
 
-    return Math.round((filledRegions.size / puzzle.regions.length) * 100);
+    const playableRegions = puzzle.regions.filter((region) => region.isPlayable);
+    const filledPlayableRegions = playableRegions.filter((region) => filledRegions.has(region.id));
+
+    return Math.round((filledPlayableRegions.length / Math.max(1, playableRegions.length)) * 100);
   }, [filledRegions.size, puzzle]);
 
   const canSave = Boolean(sourceImage && puzzle);
@@ -60,8 +64,9 @@ export function App() {
 
     try {
       const dataUrl = await fileToDataUrl(file);
-      setSourceImage(dataUrl);
-      await processImage(dataUrl, difficulty);
+      const puzzleSource = useAiDrawing ? await cartoonizePhoto(file) : dataUrl;
+      setSourceImage(puzzleSource);
+      await processImage(puzzleSource, difficulty);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Something went wrong with that photo.");
     } finally {
@@ -79,7 +84,25 @@ export function App() {
     setPuzzle(nextPuzzle);
     setFilledRegions(new Set());
     setSelectedColorId(nextPuzzle.palette[0]?.id ?? null);
-    setStatus(`Puzzle ready: ${nextPuzzle.regions.length} numbered regions.`);
+    setStatus(`Puzzle ready: ${nextPuzzle.regions.filter((region) => region.isPlayable).length} numbered regions.`);
+  }
+
+  async function cartoonizePhoto(file: File) {
+    setStatus("Creating an AI drawing...");
+    const form = new FormData();
+    form.append("image", file);
+
+    const response = await fetch("/api/cartoonize", {
+      method: "POST",
+      body: form,
+    });
+    const payload = (await response.json()) as { imageDataUrl?: string; error?: string };
+
+    if (!response.ok || !payload.imageDataUrl) {
+      throw new Error(payload.error || "AI drawing mode failed.");
+    }
+
+    return payload.imageDataUrl;
   }
 
   async function handleDifficultyChange(nextDifficulty: (typeof DIFFICULTIES)[number]) {
@@ -107,6 +130,11 @@ export function App() {
     const region = puzzle.regions.find((item) => item.id === regionId);
 
     if (!region) {
+      return;
+    }
+
+    if (!region.isPlayable) {
+      setStatus("That tiny detail does not count toward the puzzle.");
       return;
     }
 
@@ -231,6 +259,10 @@ export function App() {
           <button className="secondary" type="button" disabled={!puzzle || filledRegions.size === 0} onClick={clearAll}>
             Clear all
           </button>
+          <label className="toggle-control">
+            <input checked={useAiDrawing} type="checkbox" onChange={(event) => setUseAiDrawing(event.target.checked)} />
+            <span>AI drawing</span>
+          </label>
         </div>
       </section>
 

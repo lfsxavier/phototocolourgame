@@ -46,6 +46,7 @@ export async function createPuzzle(source: string, options: PuzzleOptions): Prom
     rows,
   );
   const { regionIds, regions } = buildRegions(colorIds, columns, rows);
+  markPlayableRegions(regions);
 
   return {
     columns,
@@ -159,28 +160,15 @@ function drawPuzzle(
   context.fillStyle = "#34373f";
   context.font = `700 ${Math.max(10, Math.round(cellSize * 1.35))}px sans-serif`;
 
-  const placedLabels: Array<{ x: number; y: number }> = [];
-  const minLabelDistance = cellSize * 3.2;
-
   for (const region of [...regionById.values()].sort((a, b) => b.cells.length - a.cells.length)) {
-    if (filledRegions.has(region.id) || region.cells.length < 18) {
+    if (filledRegions.has(region.id) || !region.isPlayable) {
       continue;
     }
 
     const labelX = (region.center.x + 0.5) * cellSize;
     const labelY = (region.center.y + 0.5) * cellSize;
-    const overlapsLabel = placedLabels.some((label) => {
-      const dx = label.x - labelX;
-      const dy = label.y - labelY;
-      return Math.sqrt(dx * dx + dy * dy) < minLabelDistance;
-    });
-
-    if (overlapsLabel) {
-      continue;
-    }
 
     context.fillText(String(region.colorId), labelX, labelY);
-    placedLabels.push({ x: labelX, y: labelY });
   }
 }
 
@@ -256,12 +244,37 @@ function buildRegions(colorIds: number[], columns: number, rows: number) {
       id: nextRegionId,
       colorId,
       cells,
+      isPlayable: false,
       center,
     });
     nextRegionId += 1;
   }
 
   return { regionIds, regions };
+}
+
+function markPlayableRegions(regions: ColourRegion[]) {
+  const placedLabels: Array<{ x: number; y: number }> = [];
+  const minLabelDistance = 3.2;
+
+  for (const region of [...regions].sort((a, b) => b.cells.length - a.cells.length)) {
+    if (region.cells.length < 18) {
+      region.isPlayable = false;
+      continue;
+    }
+
+    const overlapsLabel = placedLabels.some((label) => {
+      const dx = label.x - region.center.x;
+      const dy = label.y - region.center.y;
+      return Math.sqrt(dx * dx + dy * dy) < minLabelDistance;
+    });
+
+    region.isPlayable = !overlapsLabel;
+
+    if (region.isPlayable) {
+      placedLabels.push({ x: region.center.x, y: region.center.y });
+    }
+  }
 }
 
 function regionLabelCell(

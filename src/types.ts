@@ -8,6 +8,7 @@ export type ColourRegion = {
   id: number;
   colorId: number;
   cells: number[];
+  isPlayable: boolean;
   center: {
     x: number;
     y: number;
