@@ -17,6 +17,7 @@ const DIFFICULTIES = [
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [originalPhoto, setOriginalPhoto] = useState<{ dataUrl: string; name: string; type: string } | null>(null);
   const [sourceImage, setSourceImage] = useState<string>("");
   const [puzzle, setPuzzle] = useState<ColourPuzzle | null>(null);
   const [filledRegions, setFilledRegions] = useState<Set<number>>(() => new Set());
@@ -64,6 +65,7 @@ export function App() {
 
     try {
       const dataUrl = await fileToDataUrl(file);
+      setOriginalPhoto({ dataUrl, name: file.name || "photo.jpg", type: file.type || "image/jpeg" });
       const puzzleSource = useAiDrawing ? await cartoonizePhoto(file) : dataUrl;
       setSourceImage(puzzleSource);
       await processImage(puzzleSource, difficulty);
@@ -102,7 +104,33 @@ export function App() {
       throw new Error(payload.error || "AI drawing mode failed.");
     }
 
+    setStatus("AI drawing ready. Building puzzle...");
     return payload.imageDataUrl;
+  }
+
+  async function handleAiDrawingChange(enabled: boolean) {
+    setUseAiDrawing(enabled);
+
+    if (!originalPhoto) {
+      setStatus(enabled ? "AI drawing will be used for the next photo." : "AI drawing is off.");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const nextSource = enabled
+        ? await cartoonizePhoto(dataUrlToFile(originalPhoto.dataUrl, originalPhoto.name, originalPhoto.type))
+        : originalPhoto.dataUrl;
+      setSourceImage(nextSource);
+      await processImage(nextSource, difficulty);
+    } catch (error) {
+      setUseAiDrawing(false);
+      setSourceImage(originalPhoto.dataUrl);
+      await processImage(originalPhoto.dataUrl, difficulty);
+      setStatus(error instanceof Error ? error.message : "AI drawing mode failed.");
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   async function handleDifficultyChange(nextDifficulty: (typeof DIFFICULTIES)[number]) {
@@ -183,6 +211,7 @@ export function App() {
     }
 
     setSourceImage(project.imageDataUrl);
+    setOriginalPhoto(null);
     setPuzzle(project.puzzle);
     setFilledRegions(new Set(project.filledRegions ?? []));
     setSelectedColorId(project.puzzle.palette[0]?.id ?? null);
@@ -260,7 +289,7 @@ export function App() {
             Clear all
           </button>
           <label className="toggle-control">
-            <input checked={useAiDrawing} type="checkbox" onChange={(event) => setUseAiDrawing(event.target.checked)} />
+            <input checked={useAiDrawing} type="checkbox" onChange={(event) => handleAiDrawingChange(event.target.checked)} />
             <span>AI drawing</span>
           </label>
         </div>
@@ -312,4 +341,17 @@ export function App() {
       </aside>
     </main>
   );
+}
+
+function dataUrlToFile(dataUrl: string, name: string, type: string) {
+  const [header, base64] = dataUrl.split(",");
+  const mimeType = header.match(/data:(.*?);/)?.[1] || type;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new File([bytes], name, { type: mimeType });
 }
