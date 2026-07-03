@@ -13,9 +13,9 @@ npm run dev
 - Build command: `npm run build`
 - Output directory: `dist`
 
-## Optional AI drawing mode
+## AI drawing mode
 
-AI drawing mode uses a Cloudflare Pages Function at `/api/cartoonize`, so the OpenAI API key is never exposed in the browser.
+New photos are first transformed by AI into a child-friendly drawing. This uses a Cloudflare Pages Function at `/api/cartoonize`, so the OpenAI API key is never exposed in the browser.
 
 In Cloudflare Pages, add:
 

@@ -32,7 +32,6 @@ export function App() {
   const [difficulty, setDifficulty] = useState(DIFFICULTIES[0]);
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [useAiDrawing, setUseAiDrawing] = useState(false);
   const [aiStyle, setAiStyle] = useState(AI_STYLES[0]);
   const [aiPreview, setAiPreview] = useState<string>("");
   const [aiError, setAiError] = useState<string>("");
@@ -89,16 +88,11 @@ export function App() {
       setAiError("");
       setAiPreview("");
 
-      if (useAiDrawing) {
-        const preview = await cartoonizePhoto(file);
-        setAiPreview(preview);
-        setSourceImage("");
-        setPuzzle(null);
-        setStatus("Review the AI drawing, then use it or try another.");
-      } else {
-        setSourceImage(dataUrl);
-        await processImage(dataUrl, difficulty);
-      }
+      const preview = await cartoonizePhoto(file);
+      setAiPreview(preview);
+      setSourceImage("");
+      setPuzzle(null);
+      setStatus("Review the AI drawing, then use it or update the style.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Something went wrong with that photo.");
     } finally {
@@ -144,40 +138,6 @@ export function App() {
     return payload.imageDataUrl;
   }
 
-  async function handleAiDrawingChange(enabled: boolean) {
-    setUseAiDrawing(enabled);
-    setAiError("");
-
-    if (!originalPhoto) {
-      setStatus(enabled ? "AI drawing will be used for the next photo." : "AI drawing is off.");
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      if (enabled) {
-        const nextPreview = await cartoonizePhoto(dataUrlToFile(originalPhoto.dataUrl, originalPhoto.name, originalPhoto.type));
-        setAiPreview(nextPreview);
-        setPuzzle(null);
-        setSourceImage("");
-        setStatus("Review the AI drawing, then use it or try another.");
-      } else {
-        setAiPreview("");
-        setSourceImage(originalPhoto.dataUrl);
-        await processImage(originalPhoto.dataUrl, difficulty);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "AI drawing mode failed.";
-      setUseAiDrawing(false);
-      setSourceImage(originalPhoto.dataUrl);
-      await processImage(originalPhoto.dataUrl, difficulty);
-      setAiError(message);
-      setStatus(message);
-    } finally {
-      setIsProcessing(false);
-    }
-  }
-
   async function retryAiPreview() {
     if (!originalPhoto) {
       return;
@@ -187,7 +147,9 @@ export function App() {
     try {
       const nextPreview = await cartoonizePhoto(dataUrlToFile(originalPhoto.dataUrl, originalPhoto.name, originalPhoto.type));
       setAiPreview(nextPreview);
-      setStatus("Review the new AI drawing.");
+      setPuzzle(null);
+      setSourceImage("");
+      setStatus("Review the updated AI drawing.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI drawing mode failed.";
       setAiError(message);
@@ -205,6 +167,7 @@ export function App() {
     setIsProcessing(true);
     setSourceImage(aiPreview);
     setAiError("");
+    setAiPreview("");
     try {
       await processImage(aiPreview, difficulty);
       setStatus("AI drawing turned into a puzzle.");
@@ -218,7 +181,6 @@ export function App() {
       return;
     }
 
-    setUseAiDrawing(false);
     setAiPreview("");
     setIsProcessing(true);
     setSourceImage(originalPhoto.dataUrl);
@@ -349,12 +311,24 @@ export function App() {
           {aiPreview ? (
             <div className="preview-panel">
               <img src={aiPreview} alt="AI drawing preview" />
+              <div className="style-strip" aria-label="AI drawing style">
+                {AI_STYLES.map((style) => (
+                  <button
+                    className={style.id === aiStyle.id ? "active" : ""}
+                    key={style.id}
+                    type="button"
+                    onClick={() => setAiStyle(style)}
+                  >
+                    {style.label}
+                  </button>
+                ))}
+              </div>
               <div className="preview-actions">
                 <button type="button" onClick={useAiPreview}>
                   Use this
                 </button>
                 <button className="secondary" type="button" onClick={retryAiPreview}>
-                  Try again
+                  Update style
                 </button>
                 <button className="secondary" type="button" onClick={useOriginalPhoto}>
                   Use original
@@ -400,25 +374,7 @@ export function App() {
           <button className="secondary" type="button" disabled={!puzzle || filledRegions.size === 0} onClick={clearAll}>
             Clear all
           </button>
-          <label className="toggle-control">
-            <input checked={useAiDrawing} type="checkbox" onChange={(event) => handleAiDrawingChange(event.target.checked)} />
-            <span>AI drawing</span>
-          </label>
         </div>
-        {useAiDrawing && (
-          <div className="style-strip" aria-label="AI drawing style">
-            {AI_STYLES.map((style) => (
-              <button
-                className={style.id === aiStyle.id ? "active" : ""}
-                key={style.id}
-                type="button"
-                onClick={() => setAiStyle(style)}
-              >
-                {style.label}
-              </button>
-            ))}
-          </div>
-        )}
         {aiError && <p className="error-banner">{aiError}</p>}
         {showCelebration && (
           <div className="complete-banner">
