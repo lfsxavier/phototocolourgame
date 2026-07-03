@@ -6,7 +6,8 @@ type PuzzleOptions = {
 };
 
 const MAX_CANVAS_SIZE = 720;
-const RENDER_CELL_SIZE = 8;
+const RENDER_CANVAS_WIDTH = 760;
+const EXPORT_CANVAS_WIDTH = 1400;
 
 export async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -70,14 +71,15 @@ export function renderPuzzleToCanvas(
   }
 
   const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const cssWidth = puzzle.columns * RENDER_CELL_SIZE;
-  const cssHeight = puzzle.rows * RENDER_CELL_SIZE;
+  const cellSize = RENDER_CANVAS_WIDTH / puzzle.columns;
+  const cssWidth = RENDER_CANVAS_WIDTH;
+  const cssHeight = puzzle.rows * cellSize;
   canvas.width = Math.round(cssWidth * dpr);
   canvas.height = Math.round(cssHeight * dpr);
   canvas.style.width = `${cssWidth}px`;
   canvas.style.height = `${cssHeight}px`;
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
-  drawPuzzle(context, puzzle, filledRegions, includeNumbers, RENDER_CELL_SIZE);
+  drawPuzzle(context, puzzle, filledRegions, includeNumbers, cellSize, 16);
 }
 
 export function renderPuzzleToDataUrl(
@@ -92,10 +94,10 @@ export function renderPuzzleToDataUrl(
     throw new Error("Canvas is not available in this browser.");
   }
 
-  const exportCellSize = 12;
+  const exportCellSize = EXPORT_CANVAS_WIDTH / puzzle.columns;
   canvas.width = puzzle.columns * exportCellSize;
   canvas.height = puzzle.rows * exportCellSize;
-  drawPuzzle(context, puzzle, filledRegions, includeNumbers, exportCellSize);
+  drawPuzzle(context, puzzle, filledRegions, includeNumbers, exportCellSize, 28);
   return canvas.toDataURL("image/png");
 }
 
@@ -122,6 +124,7 @@ function drawPuzzle(
   filledRegions: Set<number>,
   includeNumbers: boolean,
   cellSize: number,
+  labelSize: number,
 ) {
   const width = puzzle.columns * cellSize;
   const height = puzzle.rows * cellSize;
@@ -158,7 +161,7 @@ function drawPuzzle(
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = "#34373f";
-  context.font = `700 ${Math.max(10, Math.round(cellSize * 1.35))}px sans-serif`;
+  context.font = `700 ${labelSize}px sans-serif`;
 
   for (const region of [...regionById.values()].sort((a, b) => b.cells.length - a.cells.length)) {
     if (filledRegions.has(region.id) || !region.isPlayable) {

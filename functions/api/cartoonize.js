@@ -1,8 +1,9 @@
 const PROMPT = [
-  "Transform the uploaded photo into a simple flat-colour cartoon illustration for a children's colour-by-number puzzle.",
-  "Preserve the main subject and composition.",
-  "Use clean black outlines, large simple shapes, flat colours, and minimal shading.",
-  "Remove visual clutter, tiny texture, glare, noise, and unnecessary background detail.",
+  "Transform the uploaded photo into a cheerful children's storybook cartoon illustration for a colour-by-number puzzle.",
+  "Preserve the main subject, pose, relationship, and composition, but make the result more charming and clear than the photo.",
+  "Use clean black outlines, large simple shapes, warm flat colours, expressive faces or hands when present, and minimal shading.",
+  "Simplify or remove clutter, tiny texture, glare, noise, and unnecessary background detail.",
+  "Prefer a small number of broad colour regions that would be satisfying for a child to fill.",
   "Do not add text, labels, numbers, watermarks, or decorative borders.",
 ].join(" ");
 
