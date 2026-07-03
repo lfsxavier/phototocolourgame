@@ -26,6 +26,7 @@ export function App() {
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [useAiDrawing, setUseAiDrawing] = useState(false);
+  const [aiError, setAiError] = useState<string>("");
   const [status, setStatus] = useState("Choose a photo to begin.");
 
   useEffect(() => {
@@ -66,6 +67,7 @@ export function App() {
     try {
       const dataUrl = await fileToDataUrl(file);
       setOriginalPhoto({ dataUrl, name: file.name || "photo.jpg", type: file.type || "image/jpeg" });
+      setAiError("");
       const puzzleSource = useAiDrawing ? await cartoonizePhoto(file) : dataUrl;
       setSourceImage(puzzleSource);
       await processImage(puzzleSource, difficulty);
@@ -91,6 +93,7 @@ export function App() {
 
   async function cartoonizePhoto(file: File) {
     setStatus("Creating an AI drawing...");
+    setAiError("");
     const form = new FormData();
     form.append("image", file);
 
@@ -98,10 +101,13 @@ export function App() {
       method: "POST",
       body: form,
     });
-    const payload = (await response.json()) as { imageDataUrl?: string; error?: string };
+    const payload = (await response.json()) as { imageDataUrl?: string; error?: string; model?: string; requestId?: string };
 
     if (!response.ok || !payload.imageDataUrl) {
-      throw new Error(payload.error || "AI drawing mode failed.");
+      const details = [payload.error || "AI drawing mode failed.", payload.model && `Model: ${payload.model}`, payload.requestId && `Request: ${payload.requestId}`]
+        .filter(Boolean)
+        .join(" ");
+      throw new Error(details);
     }
 
     setStatus("AI drawing ready. Building puzzle...");
@@ -110,6 +116,7 @@ export function App() {
 
   async function handleAiDrawingChange(enabled: boolean) {
     setUseAiDrawing(enabled);
+    setAiError("");
 
     if (!originalPhoto) {
       setStatus(enabled ? "AI drawing will be used for the next photo." : "AI drawing is off.");
@@ -124,10 +131,12 @@ export function App() {
       setSourceImage(nextSource);
       await processImage(nextSource, difficulty);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "AI drawing mode failed.";
       setUseAiDrawing(false);
       setSourceImage(originalPhoto.dataUrl);
       await processImage(originalPhoto.dataUrl, difficulty);
-      setStatus(error instanceof Error ? error.message : "AI drawing mode failed.");
+      setAiError(message);
+      setStatus(message);
     } finally {
       setIsProcessing(false);
     }
@@ -293,6 +302,7 @@ export function App() {
             <span>AI drawing</span>
           </label>
         </div>
+        {aiError && <p className="error-banner">{aiError}</p>}
       </section>
 
       <aside className="side-panel">

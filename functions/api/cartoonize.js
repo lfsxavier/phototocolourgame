@@ -25,8 +25,9 @@ export async function onRequestPost(context) {
     return jsonResponse({ error: "No image file was uploaded." }, 400);
   }
 
+  const model = context.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
   const form = new FormData();
-  form.append("model", context.env.OPENAI_IMAGE_MODEL || "gpt-image-1-mini");
+  form.append("model", model);
   form.append("prompt", PROMPT);
   form.append("image", image, image.name || "photo.jpg");
   form.append("size", "1024x1024");
@@ -41,11 +42,21 @@ export async function onRequestPost(context) {
   });
 
   const payload = await response.json();
+  const requestId = response.headers.get("x-request-id");
 
   if (!response.ok) {
+    console.error("AI drawing failed", {
+      error: payload.error?.message,
+      model,
+      requestId,
+      status: response.status,
+    });
+
     return jsonResponse(
       {
         error: payload.error?.message || "The AI drawing step failed.",
+        model,
+        requestId,
       },
       response.status,
     );
@@ -59,6 +70,8 @@ export async function onRequestPost(context) {
 
   return jsonResponse({
     imageDataUrl: `data:image/png;base64,${imageBase64}`,
+    model,
+    requestId,
   });
 }
 
@@ -70,4 +83,3 @@ function jsonResponse(payload, status = 200) {
     },
   });
 }
-

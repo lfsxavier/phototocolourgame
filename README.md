@@ -20,6 +20,6 @@ AI drawing mode uses a Cloudflare Pages Function at `/api/cartoonize`, so the Op
 In Cloudflare Pages, add:
 
 - `OPENAI_API_KEY`: your OpenAI API key
-- `OPENAI_IMAGE_MODEL`: optional, defaults to `gpt-image-1-mini`
+- `OPENAI_IMAGE_MODEL`: optional, defaults to `gpt-image-2`
 
 After saving environment variables, redeploy the Pages project.
