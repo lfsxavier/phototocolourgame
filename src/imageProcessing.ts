@@ -46,8 +46,9 @@ export async function createPuzzle(source: string, options: PuzzleOptions): Prom
     columns,
     rows,
   );
-  const { regionIds, regions } = buildRegions(colorIds, columns, rows);
-  markPlayableRegions(regions);
+  const cleanedColorIds = mergeTinyRegions(colorIds, columns, rows);
+  const { regionIds, regions } = buildRegions(cleanedColorIds, columns, rows);
+  markPlayableRegions(regions, columns);
 
   return {
     columns,
@@ -256,12 +257,13 @@ function buildRegions(colorIds: number[], columns: number, rows: number) {
   return { regionIds, regions };
 }
 
-function markPlayableRegions(regions: ColourRegion[]) {
+function markPlayableRegions(regions: ColourRegion[], columns: number) {
   const placedLabels: Array<{ x: number; y: number }> = [];
   const minLabelDistance = 3.2;
+  const minimumLabelRegion = Math.max(18, Math.round(columns * 0.28));
 
   for (const region of [...regions].sort((a, b) => b.cells.length - a.cells.length)) {
-    if (region.cells.length < 18) {
+    if (region.cells.length < minimumLabelRegion) {
       region.isPlayable = false;
       continue;
     }
@@ -278,6 +280,51 @@ function markPlayableRegions(regions: ColourRegion[]) {
       placedLabels.push({ x: region.center.x, y: region.center.y });
     }
   }
+}
+
+function mergeTinyRegions(colorIds: number[], columns: number, rows: number) {
+  let current = [...colorIds];
+  const minimumRegionSize = Math.max(20, Math.round(columns * rows * 0.0016));
+
+  for (let pass = 0; pass < 3; pass += 1) {
+    const { regions } = buildRegions(current, columns, rows);
+    const next = [...current];
+    let changed = false;
+
+    for (const region of regions) {
+      if (region.cells.length >= minimumRegionSize) {
+        continue;
+      }
+
+      const neighborCounts = new Map<number, number>();
+      for (const cell of region.cells) {
+        for (const neighbor of neighbors(cell, columns, rows)) {
+          const neighborColor = current[neighbor];
+          if (neighborColor !== region.colorId) {
+            neighborCounts.set(neighborColor, (neighborCounts.get(neighborColor) ?? 0) + 1);
+          }
+        }
+      }
+
+      const replacement = [...neighborCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (!replacement) {
+        continue;
+      }
+
+      for (const cell of region.cells) {
+        next[cell] = replacement;
+      }
+      changed = true;
+    }
+
+    current = next;
+
+    if (!changed) {
+      break;
+    }
+  }
+
+  return current;
 }
 
 function regionLabelCell(

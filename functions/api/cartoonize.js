@@ -1,11 +1,9 @@
-const PROMPT = [
-  "Transform the uploaded photo into a cheerful children's storybook cartoon illustration for a colour-by-number puzzle.",
-  "Preserve the main subject, pose, relationship, and composition, but make the result more charming and clear than the photo.",
-  "Use clean black outlines, large simple shapes, warm flat colours, expressive faces or hands when present, and minimal shading.",
-  "Simplify or remove clutter, tiny texture, glare, noise, and unnecessary background detail.",
-  "Prefer a small number of broad colour regions that would be satisfying for a child to fill.",
-  "Do not add text, labels, numbers, watermarks, or decorative borders.",
-].join(" ");
+const STYLE_PROMPTS = {
+  storybook: "a cheerful children's storybook cartoon illustration with warm colours and gentle charm",
+  cartoon: "a bright modern cartoon illustration with playful shapes and bold clean outlines",
+  fairytale: "a magical fairytale colouring-book illustration with soft whimsical details and charming shapes",
+  simple: "a very simple preschool colouring-page illustration with extra large shapes and very little background detail",
+};
 
 export async function onRequestPost(context) {
   const apiKey = context.env.OPENAI_API_KEY;
@@ -26,10 +24,20 @@ export async function onRequestPost(context) {
     return jsonResponse({ error: "No image file was uploaded." }, 400);
   }
 
+  const style = String(body.get("style") || "storybook");
+  const stylePrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.storybook;
+  const prompt = [
+    `Transform the uploaded photo into ${stylePrompt}.`,
+    "Preserve the main subject, pose, relationship, and composition, but make the result more charming and clear than the photo.",
+    "Use clean black outlines, large simple shapes, expressive faces or hands when present, and minimal shading.",
+    "Simplify or remove clutter, tiny texture, glare, noise, and unnecessary background detail.",
+    "Prefer broad colour regions that would be satisfying for a child to fill.",
+    "Do not add text, labels, numbers, watermarks, or decorative borders.",
+  ].join(" ");
   const model = context.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
   const form = new FormData();
   form.append("model", model);
-  form.append("prompt", PROMPT);
+  form.append("prompt", prompt);
   form.append("image", image, image.name || "photo.jpg");
   form.append("size", "1024x1024");
   form.append("quality", "low");

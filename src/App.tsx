@@ -10,9 +10,16 @@ import { listProjects, saveProject } from "./db";
 import type { ColourPuzzle, PaletteColor, SavedProject } from "./types";
 
 const DIFFICULTIES = [
-  { label: "Easy", columns: 72, colors: 8 },
+  { label: "Easy", columns: 56, colors: 7 },
   { label: "Bright", columns: 96, colors: 12 },
   { label: "Detailed", columns: 124, colors: 18 },
+];
+
+const AI_STYLES = [
+  { id: "storybook", label: "Storybook" },
+  { id: "cartoon", label: "Cartoon" },
+  { id: "fairytale", label: "Fairytale" },
+  { id: "simple", label: "Simple" },
 ];
 
 export function App() {
@@ -26,7 +33,10 @@ export function App() {
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [useAiDrawing, setUseAiDrawing] = useState(false);
+  const [aiStyle, setAiStyle] = useState(AI_STYLES[0]);
+  const [aiPreview, setAiPreview] = useState<string>("");
   const [aiError, setAiError] = useState<string>("");
+  const [showCelebration, setShowCelebration] = useState(false);
   const [status, setStatus] = useState("Choose a photo to begin.");
 
   useEffect(() => {
@@ -53,7 +63,16 @@ export function App() {
   }, [filledRegions.size, puzzle]);
 
   const canSave = Boolean(sourceImage && puzzle);
+  const isComplete = Boolean(puzzle && progress === 100);
   const selectedColor = puzzle?.palette.find((color) => color.id === selectedColorId) ?? null;
+
+  useEffect(() => {
+    if (!isComplete) {
+      return;
+    }
+
+    setShowCelebration(true);
+  }, [isComplete]);
 
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -68,9 +87,18 @@ export function App() {
       const dataUrl = await fileToDataUrl(file);
       setOriginalPhoto({ dataUrl, name: file.name || "photo.jpg", type: file.type || "image/jpeg" });
       setAiError("");
-      const puzzleSource = useAiDrawing ? await cartoonizePhoto(file) : dataUrl;
-      setSourceImage(puzzleSource);
-      await processImage(puzzleSource, difficulty);
+      setAiPreview("");
+
+      if (useAiDrawing) {
+        const preview = await cartoonizePhoto(file);
+        setAiPreview(preview);
+        setSourceImage("");
+        setPuzzle(null);
+        setStatus("Review the AI drawing, then use it or try another.");
+      } else {
+        setSourceImage(dataUrl);
+        await processImage(dataUrl, difficulty);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Something went wrong with that photo.");
     } finally {
@@ -87,6 +115,7 @@ export function App() {
 
     setPuzzle(nextPuzzle);
     setFilledRegions(new Set());
+    setShowCelebration(false);
     setSelectedColorId(nextPuzzle.palette[0]?.id ?? null);
     setStatus(`Puzzle ready: ${nextPuzzle.regions.filter((region) => region.isPlayable).length} numbered regions.`);
   }
@@ -96,6 +125,7 @@ export function App() {
     setAiError("");
     const form = new FormData();
     form.append("image", file);
+    form.append("style", aiStyle.id);
 
     const response = await fetch("/api/cartoonize", {
       method: "POST",
@@ -125,11 +155,17 @@ export function App() {
 
     setIsProcessing(true);
     try {
-      const nextSource = enabled
-        ? await cartoonizePhoto(dataUrlToFile(originalPhoto.dataUrl, originalPhoto.name, originalPhoto.type))
-        : originalPhoto.dataUrl;
-      setSourceImage(nextSource);
-      await processImage(nextSource, difficulty);
+      if (enabled) {
+        const nextPreview = await cartoonizePhoto(dataUrlToFile(originalPhoto.dataUrl, originalPhoto.name, originalPhoto.type));
+        setAiPreview(nextPreview);
+        setPuzzle(null);
+        setSourceImage("");
+        setStatus("Review the AI drawing, then use it or try another.");
+      } else {
+        setAiPreview("");
+        setSourceImage(originalPhoto.dataUrl);
+        await processImage(originalPhoto.dataUrl, difficulty);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI drawing mode failed.";
       setUseAiDrawing(false);
@@ -137,6 +173,57 @@ export function App() {
       await processImage(originalPhoto.dataUrl, difficulty);
       setAiError(message);
       setStatus(message);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  async function retryAiPreview() {
+    if (!originalPhoto) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const nextPreview = await cartoonizePhoto(dataUrlToFile(originalPhoto.dataUrl, originalPhoto.name, originalPhoto.type));
+      setAiPreview(nextPreview);
+      setStatus("Review the new AI drawing.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "AI drawing mode failed.";
+      setAiError(message);
+      setStatus(message);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  async function useAiPreview() {
+    if (!aiPreview) {
+      return;
+    }
+
+    setIsProcessing(true);
+    setSourceImage(aiPreview);
+    setAiError("");
+    try {
+      await processImage(aiPreview, difficulty);
+      setStatus("AI drawing turned into a puzzle.");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  async function useOriginalPhoto() {
+    if (!originalPhoto) {
+      return;
+    }
+
+    setUseAiDrawing(false);
+    setAiPreview("");
+    setIsProcessing(true);
+    setSourceImage(originalPhoto.dataUrl);
+    try {
+      await processImage(originalPhoto.dataUrl, difficulty);
     } finally {
       setIsProcessing(false);
     }
@@ -229,6 +316,7 @@ export function App() {
 
   function clearAll() {
     setFilledRegions(new Set());
+    setShowCelebration(false);
     setStatus("Cleared the current puzzle.");
   }
 
@@ -258,7 +346,22 @@ export function App() {
         </header>
 
         <div className="canvas-panel">
-          {puzzle ? (
+          {aiPreview ? (
+            <div className="preview-panel">
+              <img src={aiPreview} alt="AI drawing preview" />
+              <div className="preview-actions">
+                <button type="button" onClick={useAiPreview}>
+                  Use this
+                </button>
+                <button className="secondary" type="button" onClick={retryAiPreview}>
+                  Try again
+                </button>
+                <button className="secondary" type="button" onClick={useOriginalPhoto}>
+                  Use original
+                </button>
+              </div>
+            </div>
+          ) : puzzle ? (
             <canvas
               aria-label="Playable colour-by-number puzzle"
               className="puzzle-canvas"
@@ -302,7 +405,38 @@ export function App() {
             <span>AI drawing</span>
           </label>
         </div>
+        {useAiDrawing && (
+          <div className="style-strip" aria-label="AI drawing style">
+            {AI_STYLES.map((style) => (
+              <button
+                className={style.id === aiStyle.id ? "active" : ""}
+                key={style.id}
+                type="button"
+                onClick={() => setAiStyle(style)}
+              >
+                {style.label}
+              </button>
+            ))}
+          </div>
+        )}
         {aiError && <p className="error-banner">{aiError}</p>}
+        {showCelebration && (
+          <div className="complete-banner">
+            <div className="confetti" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
+            <strong>Finished!</strong>
+            <span>The picture is complete.</span>
+            <button type="button" onClick={() => setShowCelebration(false)}>
+              Keep colouring
+            </button>
+          </div>
+        )}
       </section>
 
       <aside className="side-panel">
