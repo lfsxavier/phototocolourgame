@@ -26,6 +26,9 @@ export type ColourPuzzle = {
 export type SavedProject = {
   id: string;
   title: string;
+  originalPhotoDataUrl?: string;
+  originalPhotoName?: string;
+  originalPhotoType?: string;
   imageDataUrl: string;
   puzzle: ColourPuzzle;
   filledRegions: number[];

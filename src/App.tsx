@@ -66,6 +66,7 @@ export function App() {
   }, [filledRegions.size, puzzle]);
 
   const canSave = Boolean(sourceImage && puzzle);
+  const canRestartStyle = Boolean(originalPhoto);
   const isComplete = Boolean(puzzle && progress === 100);
   const playablePalette = useMemo(() => {
     if (!puzzle) {
@@ -270,6 +271,9 @@ export function App() {
     const project: SavedProject = {
       id: crypto.randomUUID(),
       title: `Drawing ${projects.length + 1}`,
+      originalPhotoDataUrl: originalPhoto?.dataUrl,
+      originalPhotoName: originalPhoto?.name,
+      originalPhotoType: originalPhoto?.type,
       imageDataUrl: sourceImage,
       puzzle,
       filledRegions: filled,
@@ -292,7 +296,15 @@ export function App() {
     }
 
     setSourceImage(project.imageDataUrl);
-    setOriginalPhoto(null);
+    setOriginalPhoto(
+      project.originalPhotoDataUrl
+        ? {
+            dataUrl: project.originalPhotoDataUrl,
+            name: project.originalPhotoName || "photo.jpg",
+            type: project.originalPhotoType || "image/jpeg",
+          }
+        : null,
+    );
     setPuzzle(project.puzzle);
     setFilledRegions(new Set(project.filledRegions ?? []));
     setSelectedColorId(project.puzzle.regions.find((region) => region.isPlayable)?.colorId ?? project.puzzle.palette[0]?.id ?? null);
@@ -306,15 +318,35 @@ export function App() {
     setStatus("Cleared the current puzzle.");
   }
 
-  function exportImage() {
+  function restartWithAnotherStyle() {
+    if (!originalPhoto) {
+      setStatus("The original photo is not available for this saved drawing.");
+      return;
+    }
+
+    setAiError("");
+    setAiPreview(sourceImage || originalPhoto.dataUrl);
+    setShowCelebration(false);
+    setShowBeforeAfter(false);
+    setStatus("Pick a style, then update it or use this drawing.");
+  }
+
+  function exportDrawing() {
+    if (!sourceImage) {
+      return;
+    }
+
+    downloadDataUrl(sourceImage, "colour-snap-original-drawing.png");
+    setStatus("Original drawing exported.");
+  }
+
+  function exportPuzzle() {
     if (!puzzle) {
       return;
     }
 
-    const link = document.createElement("a");
-    link.href = renderPuzzleToDataUrl(puzzle, filledRegions, false);
-    link.download = "colour-snap-finished.png";
-    link.click();
+    downloadDataUrl(renderPuzzleToDataUrl(puzzle, filledRegions, false), "colour-snap-finished-puzzle.png");
+    setStatus("Finished puzzle exported.");
   }
 
   return (
@@ -326,7 +358,7 @@ export function App() {
             <h1>Colour Snap</h1>
           </div>
           <label className="photo-button">
-            <input accept="image/*" capture="environment" type="file" onChange={handlePhotoChange} />
+            <input accept="image/*" type="file" onChange={handlePhotoChange} />
             <span>Choose photo</span>
           </label>
         </header>
@@ -392,8 +424,11 @@ export function App() {
           <button type="button" disabled={!canSave} onClick={handleSave}>
             Save progress
           </button>
-          <button type="button" disabled={!puzzle} onClick={exportImage}>
-            Export picture
+          <button type="button" disabled={!sourceImage} onClick={exportDrawing}>
+            Export drawing
+          </button>
+          <button type="button" disabled={!puzzle} onClick={exportPuzzle}>
+            Export puzzle
           </button>
         </div>
         {aiError && <p className="error-banner">{aiError}</p>}
@@ -412,6 +447,11 @@ export function App() {
             <button type="button" onClick={() => setShowBeforeAfter(true)}>
               Before / after
             </button>
+            {canRestartStyle && (
+              <button className="secondary" type="button" onClick={restartWithAnotherStyle}>
+                Try another style
+              </button>
+            )}
           </div>
         )}
         {showBeforeAfter && sourceImage && completedImage && (
@@ -424,9 +464,22 @@ export function App() {
               <h2>Finished puzzle</h2>
               <img src={completedImage} alt="Completed colour-by-number puzzle" />
             </div>
-            <button type="button" onClick={() => setShowBeforeAfter(false)}>
-              Close
-            </button>
+            <div className="compare-actions">
+              <button type="button" onClick={exportDrawing}>
+                Export drawing
+              </button>
+              <button type="button" onClick={exportPuzzle}>
+                Export puzzle
+              </button>
+              {canRestartStyle && (
+                <button type="button" onClick={restartWithAnotherStyle}>
+                  Try another style
+                </button>
+              )}
+              <button className="secondary" type="button" onClick={() => setShowBeforeAfter(false)}>
+                Close
+              </button>
+            </div>
           </div>
         )}
       </section>
@@ -495,6 +548,13 @@ function dataUrlToFile(dataUrl: string, name: string, type: string) {
   }
 
   return new File([bytes], name, { type: mimeType });
+}
+
+function downloadDataUrl(dataUrl: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = filename;
+  link.click();
 }
 
 async function prepareAiUpload(file: File): Promise<File> {
