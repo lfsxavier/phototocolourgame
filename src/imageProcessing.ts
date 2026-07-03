@@ -159,16 +159,28 @@ function drawPuzzle(
   context.fillStyle = "#34373f";
   context.font = `700 ${Math.max(10, Math.round(cellSize * 1.35))}px sans-serif`;
 
-  for (const region of regionById.values()) {
-    if (filledRegions.has(region.id) || region.cells.length < 8) {
+  const placedLabels: Array<{ x: number; y: number }> = [];
+  const minLabelDistance = cellSize * 3.2;
+
+  for (const region of [...regionById.values()].sort((a, b) => b.cells.length - a.cells.length)) {
+    if (filledRegions.has(region.id) || region.cells.length < 18) {
       continue;
     }
 
-    context.fillText(
-      String(region.colorId),
-      (region.center.x + 0.5) * cellSize,
-      (region.center.y + 0.5) * cellSize,
-    );
+    const labelX = (region.center.x + 0.5) * cellSize;
+    const labelY = (region.center.y + 0.5) * cellSize;
+    const overlapsLabel = placedLabels.some((label) => {
+      const dx = label.x - labelX;
+      const dy = label.y - labelY;
+      return Math.sqrt(dx * dx + dy * dy) < minLabelDistance;
+    });
+
+    if (overlapsLabel) {
+      continue;
+    }
+
+    context.fillText(String(region.colorId), labelX, labelY);
+    placedLabels.push({ x: labelX, y: labelY });
   }
 }
 
@@ -239,7 +251,7 @@ function buildRegions(colorIds: number[], columns: number, rows: number) {
       }
     }
 
-    const center = regionCenter(cells, columns);
+    const center = regionLabelCell(cells, colorIds, colorId, columns, rows);
     regions.push({
       id: nextRegionId,
       colorId,
@@ -252,19 +264,61 @@ function buildRegions(colorIds: number[], columns: number, rows: number) {
   return { regionIds, regions };
 }
 
-function regionCenter(cells: number[], columns: number) {
-  let xTotal = 0;
-  let yTotal = 0;
+function regionLabelCell(
+  cells: number[],
+  colorIds: number[],
+  colorId: number,
+  columns: number,
+  rows: number,
+) {
+  const cellSet = new Set(cells);
+  let bestCell = cells[0];
+  let bestScore = Number.NEGATIVE_INFINITY;
 
   for (const cell of cells) {
-    xTotal += cell % columns;
-    yTotal += Math.floor(cell / columns);
+    const col = cell % columns;
+    const row = Math.floor(cell / columns);
+    const distance = distanceToBoundary(cell, cellSet, columns, rows);
+    const sameColorNeighbors = neighbors(cell, columns, rows).filter((neighbor) => colorIds[neighbor] === colorId).length;
+    const score = distance * 10 + sameColorNeighbors;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestCell = cell;
+    }
+
+    if (col > 0 && col < columns - 1 && row > 0 && row < rows - 1 && distance >= 3) {
+      bestScore = score;
+      bestCell = cell;
+    }
   }
 
   return {
-    x: xTotal / cells.length,
-    y: yTotal / cells.length,
+    x: bestCell % columns,
+    y: Math.floor(bestCell / columns),
   };
+}
+
+function distanceToBoundary(cell: number, cellSet: Set<number>, columns: number, rows: number) {
+  const col = cell % columns;
+  const row = Math.floor(cell / columns);
+  let distance = 0;
+
+  while (distance < 8) {
+    distance += 1;
+    for (let y = row - distance; y <= row + distance; y += 1) {
+      for (let x = col - distance; x <= col + distance; x += 1) {
+        if (x < 0 || y < 0 || x >= columns || y >= rows) {
+          return distance - 1;
+        }
+        if (!cellSet.has(y * columns + x)) {
+          return distance - 1;
+        }
+      }
+    }
+  }
+
+  return distance;
 }
 
 function neighbors(index: number, columns: number, rows: number) {
