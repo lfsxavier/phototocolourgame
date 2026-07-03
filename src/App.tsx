@@ -3,6 +3,7 @@ import {
   createPuzzle,
   fileToDataUrl,
   regionAtPoint,
+  renderCompletedArtworkToDataUrl,
   renderPuzzleToCanvas,
   renderPuzzleToDataUrl,
 } from "./imageProcessing";
@@ -38,6 +39,7 @@ export function App() {
   const [aiStyle, setAiStyle] = useState(AI_STYLES[0]);
   const [aiPreview, setAiPreview] = useState<string>("");
   const [aiError, setAiError] = useState<string>("");
+  const [completedImage, setCompletedImage] = useState("");
   const [showCelebration, setShowCelebration] = useState(false);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const [status, setStatus] = useState("Choose a photo to begin.");
@@ -77,13 +79,6 @@ export function App() {
     return puzzle.palette.filter((color) => playableColorIds.has(color.id));
   }, [puzzle]);
   const selectedColor = playablePalette.find((color) => color.id === selectedColorId) ?? null;
-  const completedImage = useMemo(() => {
-    if (!puzzle || !isComplete) {
-      return "";
-    }
-
-    return renderPuzzleToDataUrl(puzzle, filledRegions, false);
-  }, [filledRegions, isComplete, puzzle]);
 
   useEffect(() => {
     if (!isComplete) {
@@ -92,6 +87,31 @@ export function App() {
 
     setShowCelebration(true);
   }, [isComplete]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (!puzzle || !sourceImage || !isComplete) {
+      setCompletedImage("");
+      return;
+    }
+
+    renderCompletedArtworkToDataUrl(sourceImage, puzzle, filledRegions)
+      .then((dataUrl) => {
+        if (isCurrent) {
+          setCompletedImage(dataUrl);
+        }
+      })
+      .catch(() => {
+        if (isCurrent) {
+          setCompletedImage(renderPuzzleToDataUrl(puzzle, filledRegions, false));
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [filledRegions, isComplete, puzzle, sourceImage]);
 
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -277,7 +297,7 @@ export function App() {
       imageDataUrl: sourceImage,
       puzzle,
       filledRegions: filled,
-      previewDataUrl: renderPuzzleToDataUrl(puzzle, new Set(filled), false),
+      previewDataUrl: completedImage || renderPuzzleToDataUrl(puzzle, new Set(filled), false),
       palette: puzzle.palette,
       createdAt: now,
       updatedAt: now,
@@ -345,7 +365,7 @@ export function App() {
       return;
     }
 
-    downloadDataUrl(renderPuzzleToDataUrl(puzzle, filledRegions, false), "colour-snap-finished-puzzle.png");
+    downloadDataUrl(completedImage || renderPuzzleToDataUrl(puzzle, filledRegions, false), "colour-snap-finished-puzzle.png");
     setStatus("Finished puzzle exported.");
   }
 

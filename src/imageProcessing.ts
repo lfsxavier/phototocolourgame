@@ -103,6 +103,40 @@ export function renderPuzzleToDataUrl(
   return canvas.toDataURL("image/png");
 }
 
+export async function renderCompletedArtworkToDataUrl(
+  source: string,
+  puzzle: ColourPuzzle,
+  filledRegions: Set<number>,
+): Promise<string> {
+  const image = await loadImage(source);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Canvas is not available in this browser.");
+  }
+
+  const exportCellSize = EXPORT_CANVAS_WIDTH / puzzle.columns;
+  const width = puzzle.columns * exportCellSize;
+  const height = puzzle.rows * exportCellSize;
+  canvas.width = width;
+  canvas.height = height;
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  drawImageCover(context, image, width, height);
+
+  context.globalAlpha = 0.7;
+  drawFilledRegions(context, puzzle, filledRegions, exportCellSize);
+  context.globalAlpha = 1;
+
+  context.globalAlpha = 0.38;
+  drawBoundaries(context, puzzle, exportCellSize, "#25282e", 0.1);
+  context.globalAlpha = 1;
+
+  return canvas.toDataURL("image/png");
+}
+
 export function regionAtPoint(
   puzzle: ColourPuzzle,
   canvas: HTMLCanvasElement,
@@ -136,24 +170,7 @@ function drawPuzzle(
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
 
-  for (const region of puzzle.regions) {
-    if (!filledRegions.has(region.id)) {
-      continue;
-    }
-
-    const color = puzzle.palette.find((item) => item.id === region.colorId);
-    if (!color) {
-      continue;
-    }
-
-    context.fillStyle = color.hex;
-    for (const cellIndex of region.cells) {
-      const col = cellIndex % puzzle.columns;
-      const row = Math.floor(cellIndex / puzzle.columns);
-      context.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-    }
-  }
-
+  drawFilledRegions(context, puzzle, filledRegions, cellSize);
   drawBoundaries(context, puzzle, cellSize);
 
   if (!includeNumbers) {
@@ -177,9 +194,40 @@ function drawPuzzle(
   }
 }
 
-function drawBoundaries(context: CanvasRenderingContext2D, puzzle: ColourPuzzle, cellSize: number) {
-  context.strokeStyle = "#3f4248";
-  context.lineWidth = Math.max(1, cellSize * 0.16);
+function drawFilledRegions(
+  context: CanvasRenderingContext2D,
+  puzzle: ColourPuzzle,
+  filledRegions: Set<number>,
+  cellSize: number,
+) {
+  for (const region of puzzle.regions) {
+    if (!filledRegions.has(region.id)) {
+      continue;
+    }
+
+    const color = puzzle.palette.find((item) => item.id === region.colorId);
+    if (!color) {
+      continue;
+    }
+
+    context.fillStyle = color.hex;
+    for (const cellIndex of region.cells) {
+      const col = cellIndex % puzzle.columns;
+      const row = Math.floor(cellIndex / puzzle.columns);
+      context.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+    }
+  }
+}
+
+function drawBoundaries(
+  context: CanvasRenderingContext2D,
+  puzzle: ColourPuzzle,
+  cellSize: number,
+  strokeStyle = "#3f4248",
+  lineScale = 0.16,
+) {
+  context.strokeStyle = strokeStyle;
+  context.lineWidth = Math.max(1, cellSize * lineScale);
   context.lineCap = "round";
   context.lineJoin = "round";
   context.beginPath();
@@ -211,6 +259,21 @@ function drawBoundaries(context: CanvasRenderingContext2D, puzzle: ColourPuzzle,
   }
 
   context.stroke();
+}
+
+function drawImageCover(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+) {
+  const scale = Math.max(width / image.width, height / image.height);
+  const scaledWidth = image.width * scale;
+  const scaledHeight = image.height * scale;
+  const x = (width - scaledWidth) / 2;
+  const y = (height - scaledHeight) / 2;
+
+  context.drawImage(image, x, y, scaledWidth, scaledHeight);
 }
 
 function buildRegions(colorIds: number[], columns: number, rows: number) {
