@@ -22,6 +22,9 @@ const AI_STYLES = [
   { id: "simple", label: "Simple" },
 ];
 
+const AI_UPLOAD_MAX_SIZE = 1024;
+const AI_UPLOAD_QUALITY = 0.82;
+
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [originalPhoto, setOriginalPhoto] = useState<{ dataUrl: string; name: string; type: string } | null>(null);
@@ -133,11 +136,13 @@ export function App() {
   }
 
   async function cartoonizePhoto(file: File) {
-    setStatus("Creating an AI drawing...");
+    setStatus("Optimising the photo...");
     setAiError("");
+    const uploadFile = await prepareAiUpload(file);
     const form = new FormData();
-    form.append("image", file);
+    form.append("image", uploadFile);
     form.append("style", aiStyle.id);
+    setStatus("Creating an AI drawing...");
 
     const response = await fetch("/api/cartoonize", {
       method: "POST",
@@ -490,4 +495,54 @@ function dataUrlToFile(dataUrl: string, name: string, type: string) {
   }
 
   return new File([bytes], name, { type: mimeType });
+}
+
+async function prepareAiUpload(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    return file;
+  }
+
+  try {
+    const image = await loadPreviewImage(URL.createObjectURL(file));
+    const scale = Math.min(1, AI_UPLOAD_MAX_SIZE / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return file;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", AI_UPLOAD_QUALITY);
+    });
+
+    if (!blob || blob.size >= file.size) {
+      return file;
+    }
+
+    return new File([blob], "colour-snap-ai-upload.jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
+function loadPreviewImage(source: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(source);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(source);
+      reject(new Error("The selected image could not be prepared."));
+    };
+    image.src = source;
+  });
 }

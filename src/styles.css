@@ -141,9 +141,9 @@ h2 {
   flex-direction: column;
   gap: 14px;
   margin: auto;
-  max-height: calc(100vh - 190px);
   max-width: 100%;
   padding: 12px;
+  width: 100%;
 }
 
 .preview-panel img {
@@ -151,7 +151,7 @@ h2 {
   border: 1px solid rgba(36, 38, 43, 0.14);
   border-radius: 6px;
   display: block;
-  max-height: calc(100vh - 300px);
+  max-height: min(54vh, 560px);
   max-width: 100%;
   object-fit: contain;
 }
@@ -495,9 +495,8 @@ h2 {
     max-height: 58vh;
   }
 
-  .preview-panel,
   .preview-panel img {
-    max-height: 58vh;
+    max-height: 38vh;
   }
 
   .control-strip > button,
