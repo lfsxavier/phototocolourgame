@@ -11,7 +11,7 @@ import type { ColourPuzzle, PaletteColor, SavedProject } from "./types";
 
 const DIFFICULTIES = [
   { label: "Easy", columns: 56, colors: 7 },
-  { label: "Bright", columns: 96, colors: 12 },
+  { label: "Normal", columns: 96, colors: 12 },
   { label: "Detailed", columns: 124, colors: 18 },
 ];
 
@@ -29,13 +29,14 @@ export function App() {
   const [puzzle, setPuzzle] = useState<ColourPuzzle | null>(null);
   const [filledRegions, setFilledRegions] = useState<Set<number>>(() => new Set());
   const [selectedColorId, setSelectedColorId] = useState<number | null>(null);
-  const [difficulty, setDifficulty] = useState(DIFFICULTIES[0]);
+  const [difficulty, setDifficulty] = useState(DIFFICULTIES[1]);
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [aiStyle, setAiStyle] = useState(AI_STYLES[0]);
   const [aiPreview, setAiPreview] = useState<string>("");
   const [aiError, setAiError] = useState<string>("");
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const [status, setStatus] = useState("Choose a photo to begin.");
 
   useEffect(() => {
@@ -63,7 +64,22 @@ export function App() {
 
   const canSave = Boolean(sourceImage && puzzle);
   const isComplete = Boolean(puzzle && progress === 100);
-  const selectedColor = puzzle?.palette.find((color) => color.id === selectedColorId) ?? null;
+  const playablePalette = useMemo(() => {
+    if (!puzzle) {
+      return [];
+    }
+
+    const playableColorIds = new Set(puzzle.regions.filter((region) => region.isPlayable).map((region) => region.colorId));
+    return puzzle.palette.filter((color) => playableColorIds.has(color.id));
+  }, [puzzle]);
+  const selectedColor = playablePalette.find((color) => color.id === selectedColorId) ?? null;
+  const completedImage = useMemo(() => {
+    if (!puzzle || !isComplete) {
+      return "";
+    }
+
+    return renderPuzzleToDataUrl(puzzle, filledRegions, false);
+  }, [filledRegions, isComplete, puzzle]);
 
   useEffect(() => {
     if (!isComplete) {
@@ -110,7 +126,9 @@ export function App() {
     setPuzzle(nextPuzzle);
     setFilledRegions(new Set());
     setShowCelebration(false);
-    setSelectedColorId(nextPuzzle.palette[0]?.id ?? null);
+    setShowBeforeAfter(false);
+    const firstPlayableColorId = nextPuzzle.regions.find((region) => region.isPlayable)?.colorId ?? nextPuzzle.palette[0]?.id ?? null;
+    setSelectedColorId(firstPlayableColorId);
     setStatus(`Puzzle ready: ${nextPuzzle.regions.filter((region) => region.isPlayable).length} numbered regions.`);
   }
 
@@ -279,6 +297,7 @@ export function App() {
   function clearAll() {
     setFilledRegions(new Set());
     setShowCelebration(false);
+    setShowBeforeAfter(false);
     setStatus("Cleared the current puzzle.");
   }
 
@@ -388,8 +407,26 @@ export function App() {
             </div>
             <strong>Finished!</strong>
             <span>The picture is complete.</span>
+            <button type="button" onClick={() => setShowBeforeAfter(true)}>
+              Before / after
+            </button>
             <button type="button" onClick={() => setShowCelebration(false)}>
               Keep colouring
+            </button>
+          </div>
+        )}
+        {showBeforeAfter && sourceImage && completedImage && (
+          <div className="compare-panel">
+            <div>
+              <h2>Original drawing</h2>
+              <img src={sourceImage} alt="Original AI drawing" />
+            </div>
+            <div>
+              <h2>Finished puzzle</h2>
+              <img src={completedImage} alt="Completed colour-by-number puzzle" />
+            </div>
+            <button type="button" onClick={() => setShowBeforeAfter(false)}>
+              Close
             </button>
           </div>
         )}
@@ -400,7 +437,7 @@ export function App() {
           <h2>Palette</h2>
           <div className="palette-grid">
             {puzzle ? (
-              puzzle.palette.map((color: PaletteColor) => (
+              playablePalette.map((color: PaletteColor) => (
                 <button
                   className={color.id === selectedColorId ? "swatch selected" : "swatch"}
                   key={color.id}
