@@ -1,4 +1,4 @@
-const CACHE_NAME = "colour-snap-v2";
+const CACHE_NAME = "colour-snap-v3";
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {

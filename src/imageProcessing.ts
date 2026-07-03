@@ -1,4 +1,4 @@
-import type { ColourPuzzle, PaletteColor } from "./types";
+import type { ColourPuzzle, ColourRegion, PaletteColor } from "./types";
 
 type PuzzleOptions = {
   columns: number;
@@ -6,6 +6,7 @@ type PuzzleOptions = {
 };
 
 const MAX_CANVAS_SIZE = 720;
+const RENDER_CELL_SIZE = 8;
 
 export async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -34,31 +35,55 @@ export async function createPuzzle(source: string, options: PuzzleOptions): Prom
   const palette = buildPalette(imageData.data, options.paletteSize);
   const columns = options.columns;
   const rows = Math.max(1, Math.round((height / width) * columns));
-  const cells = Array.from({ length: columns * rows }, (_, index) => {
-    const col = index % columns;
-    const row = Math.floor(index / columns);
-    const average = averageCellColor(imageData.data, width, height, col, row, columns, rows);
-    const nearest = nearestPaletteColor(average[0], average[1], average[2], palette);
-
-    return {
-      colorId: nearest.id,
-    };
-  });
+  const colorIds = smoothColorIds(
+    Array.from({ length: columns * rows }, (_, index) => {
+      const col = index % columns;
+      const row = Math.floor(index / columns);
+      const average = averageCellColor(imageData.data, width, height, col, row, columns, rows);
+      return nearestPaletteColor(average[0], average[1], average[2], palette).id;
+    }),
+    columns,
+    rows,
+  );
+  const { regionIds, regions } = buildRegions(colorIds, columns, rows);
 
   return {
     columns,
     rows,
-    cells,
+    regionIds,
+    regions,
     palette,
   };
 }
 
+export function renderPuzzleToCanvas(
+  canvas: HTMLCanvasElement,
+  puzzle: ColourPuzzle,
+  filledRegions: Set<number>,
+  includeNumbers: boolean,
+) {
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Canvas is not available in this browser.");
+  }
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const cssWidth = puzzle.columns * RENDER_CELL_SIZE;
+  const cssHeight = puzzle.rows * RENDER_CELL_SIZE;
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawPuzzle(context, puzzle, filledRegions, includeNumbers, RENDER_CELL_SIZE);
+}
+
 export function renderPuzzleToDataUrl(
   puzzle: ColourPuzzle,
-  filledCells: Set<number>,
+  filledRegions: Set<number>,
   includeNumbers: boolean,
 ): string {
-  const cellSize = 42;
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
 
@@ -66,34 +91,212 @@ export function renderPuzzleToDataUrl(
     throw new Error("Canvas is not available in this browser.");
   }
 
-  canvas.width = puzzle.columns * cellSize;
-  canvas.height = puzzle.rows * cellSize;
+  const exportCellSize = 12;
+  canvas.width = puzzle.columns * exportCellSize;
+  canvas.height = puzzle.rows * exportCellSize;
+  drawPuzzle(context, puzzle, filledRegions, includeNumbers, exportCellSize);
+  return canvas.toDataURL("image/png");
+}
+
+export function regionAtPoint(
+  puzzle: ColourPuzzle,
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number,
+): number | null {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor(((clientX - rect.left) / rect.width) * puzzle.columns);
+  const y = Math.floor(((clientY - rect.top) / rect.height) * puzzle.rows);
+
+  if (x < 0 || y < 0 || x >= puzzle.columns || y >= puzzle.rows) {
+    return null;
+  }
+
+  return puzzle.regionIds[y * puzzle.columns + x] ?? null;
+}
+
+function drawPuzzle(
+  context: CanvasRenderingContext2D,
+  puzzle: ColourPuzzle,
+  filledRegions: Set<number>,
+  includeNumbers: boolean,
+  cellSize: number,
+) {
+  const width = puzzle.columns * cellSize;
+  const height = puzzle.rows * cellSize;
+  const regionById = new Map(puzzle.regions.map((region) => [region.id, region]));
+
+  context.clearRect(0, 0, width, height);
   context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillRect(0, 0, width, height);
+
+  for (const region of puzzle.regions) {
+    if (!filledRegions.has(region.id)) {
+      continue;
+    }
+
+    const color = puzzle.palette.find((item) => item.id === region.colorId);
+    if (!color) {
+      continue;
+    }
+
+    context.fillStyle = color.hex;
+    for (const cellIndex of region.cells) {
+      const col = cellIndex % puzzle.columns;
+      const row = Math.floor(cellIndex / puzzle.columns);
+      context.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+    }
+  }
+
+  drawBoundaries(context, puzzle, cellSize);
+
+  if (!includeNumbers) {
+    return;
+  }
+
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.font = "700 16px sans-serif";
+  context.fillStyle = "#34373f";
+  context.font = `700 ${Math.max(10, Math.round(cellSize * 1.35))}px sans-serif`;
 
-  puzzle.cells.forEach((cell, index) => {
-    const col = index % puzzle.columns;
-    const row = Math.floor(index / puzzle.columns);
-    const x = col * cellSize;
-    const y = row * cellSize;
-    const color = puzzle.palette.find((item) => item.id === cell.colorId);
-
-    context.fillStyle = filledCells.has(index) && color ? color.hex : "#ffffff";
-    context.fillRect(x, y, cellSize, cellSize);
-    context.strokeStyle = "rgba(36, 38, 43, 0.22)";
-    context.lineWidth = 1;
-    context.strokeRect(x + 0.5, y + 0.5, cellSize, cellSize);
-
-    if (includeNumbers && !filledCells.has(index)) {
-      context.fillStyle = "#34373f";
-      context.fillText(String(cell.colorId), x + cellSize / 2, y + cellSize / 2);
+  for (const region of regionById.values()) {
+    if (filledRegions.has(region.id) || region.cells.length < 8) {
+      continue;
     }
-  });
 
-  return canvas.toDataURL("image/png");
+    context.fillText(
+      String(region.colorId),
+      (region.center.x + 0.5) * cellSize,
+      (region.center.y + 0.5) * cellSize,
+    );
+  }
+}
+
+function drawBoundaries(context: CanvasRenderingContext2D, puzzle: ColourPuzzle, cellSize: number) {
+  context.strokeStyle = "#3f4248";
+  context.lineWidth = Math.max(1, cellSize * 0.16);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.beginPath();
+
+  for (let row = 0; row < puzzle.rows; row += 1) {
+    for (let col = 0; col < puzzle.columns; col += 1) {
+      const index = row * puzzle.columns + col;
+      const regionId = puzzle.regionIds[index];
+      const x = col * cellSize;
+      const y = row * cellSize;
+
+      if (row === 0 || puzzle.regionIds[index - puzzle.columns] !== regionId) {
+        context.moveTo(x, y);
+        context.lineTo(x + cellSize, y);
+      }
+      if (col === puzzle.columns - 1 || puzzle.regionIds[index + 1] !== regionId) {
+        context.moveTo(x + cellSize, y);
+        context.lineTo(x + cellSize, y + cellSize);
+      }
+      if (row === puzzle.rows - 1 || puzzle.regionIds[index + puzzle.columns] !== regionId) {
+        context.moveTo(x + cellSize, y + cellSize);
+        context.lineTo(x, y + cellSize);
+      }
+      if (col === 0 || puzzle.regionIds[index - 1] !== regionId) {
+        context.moveTo(x, y + cellSize);
+        context.lineTo(x, y);
+      }
+    }
+  }
+
+  context.stroke();
+}
+
+function buildRegions(colorIds: number[], columns: number, rows: number) {
+  const regionIds = new Array<number>(colorIds.length).fill(-1);
+  const regions: ColourRegion[] = [];
+  let nextRegionId = 1;
+
+  for (let index = 0; index < colorIds.length; index += 1) {
+    if (regionIds[index] !== -1) {
+      continue;
+    }
+
+    const colorId = colorIds[index];
+    const queue = [index];
+    const cells: number[] = [];
+    let cursor = 0;
+    regionIds[index] = nextRegionId;
+
+    while (cursor < queue.length) {
+      const current = queue[cursor];
+      cursor += 1;
+      cells.push(current);
+
+      for (const neighbor of neighbors(current, columns, rows)) {
+        if (regionIds[neighbor] !== -1 || colorIds[neighbor] !== colorId) {
+          continue;
+        }
+
+        regionIds[neighbor] = nextRegionId;
+        queue.push(neighbor);
+      }
+    }
+
+    const center = regionCenter(cells, columns);
+    regions.push({
+      id: nextRegionId,
+      colorId,
+      cells,
+      center,
+    });
+    nextRegionId += 1;
+  }
+
+  return { regionIds, regions };
+}
+
+function regionCenter(cells: number[], columns: number) {
+  let xTotal = 0;
+  let yTotal = 0;
+
+  for (const cell of cells) {
+    xTotal += cell % columns;
+    yTotal += Math.floor(cell / columns);
+  }
+
+  return {
+    x: xTotal / cells.length,
+    y: yTotal / cells.length,
+  };
+}
+
+function neighbors(index: number, columns: number, rows: number) {
+  const col = index % columns;
+  const row = Math.floor(index / columns);
+  const result: number[] = [];
+
+  if (col > 0) result.push(index - 1);
+  if (col < columns - 1) result.push(index + 1);
+  if (row > 0) result.push(index - columns);
+  if (row < rows - 1) result.push(index + columns);
+
+  return result;
+}
+
+function smoothColorIds(colorIds: number[], columns: number, rows: number) {
+  let current = colorIds;
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    current = current.map((colorId, index) => {
+      const counts = new Map<number, number>();
+      counts.set(colorId, 1);
+
+      for (const neighbor of neighbors(index, columns, rows)) {
+        counts.set(current[neighbor], (counts.get(current[neighbor]) ?? 0) + 1);
+      }
+
+      return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    });
+  }
+
+  return current;
 }
 
 function loadImage(source: string): Promise<HTMLImageElement> {
@@ -116,8 +319,9 @@ function fitSize(width: number, height: number) {
 function buildPalette(data: Uint8ClampedArray, paletteSize: number): PaletteColor[] {
   const buckets = new Map<string, { rgb: [number, number, number]; count: number }>();
   const stride = Math.max(4, Math.floor(data.length / 12000));
+  const step = stride - (stride % 4);
 
-  for (let i = 0; i < data.length; i += stride - (stride % 4)) {
+  for (let i = 0; i < data.length; i += step) {
     const alpha = data[i + 3];
     if (alpha < 16) {
       continue;
@@ -205,4 +409,3 @@ function nearestPaletteColor(r: number, g: number, b: number, palette: PaletteCo
 function rgbToHex([r, g, b]: [number, number, number]): string {
   return `#${[r, g, b].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
-

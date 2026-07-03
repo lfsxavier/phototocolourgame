@@ -4,14 +4,21 @@ export type PaletteColor = {
   rgb: [number, number, number];
 };
 
-export type ColourCell = {
+export type ColourRegion = {
+  id: number;
   colorId: number;
+  cells: number[];
+  center: {
+    x: number;
+    y: number;
+  };
 };
 
 export type ColourPuzzle = {
   columns: number;
   rows: number;
-  cells: ColourCell[];
+  regionIds: number[];
+  regions: ColourRegion[];
   palette: PaletteColor[];
 };
 
@@ -20,7 +27,7 @@ export type SavedProject = {
   title: string;
   imageDataUrl: string;
   puzzle: ColourPuzzle;
-  filledCells: number[];
+  filledRegions: number[];
   previewDataUrl: string;
   palette: PaletteColor[];
   createdAt: string;

@@ -122,34 +122,17 @@ h2 {
   position: relative;
 }
 
-.puzzle-grid {
-  aspect-ratio: var(--puzzle-ratio, auto);
-  display: grid;
-  gap: 1px;
+.puzzle-canvas {
+  background: #ffffff;
+  border: 1px solid rgba(36, 38, 43, 0.18);
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
+  image-rendering: auto;
   margin: auto;
   max-height: calc(100vh - 190px);
   max-width: 100%;
-  padding: 8px;
-  width: min(100%, 760px);
-}
-
-.cell {
-  align-items: center;
-  aspect-ratio: 1;
-  background: #ffffff;
-  border: 1px solid rgba(36, 38, 43, 0.2);
-  border-radius: 2px;
-  color: #34373f;
-  display: flex;
-  font-size: clamp(0.62rem, 1.8vw, 0.95rem);
-  font-weight: 800;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0;
-}
-
-.cell.filled {
-  color: transparent;
+  touch-action: manipulation;
 }
 
 .empty-state {
@@ -313,9 +296,8 @@ h2 {
     min-height: 54vh;
   }
 
-  .puzzle-grid {
+  .puzzle-canvas {
     max-height: 58vh;
-    padding: 6px;
   }
 
   .control-strip > button,
