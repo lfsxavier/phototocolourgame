@@ -49,13 +49,14 @@ export async function createPuzzle(source: string, options: PuzzleOptions): Prom
   const cleanedColorIds = mergeTinyRegions(colorIds, columns, rows);
   const { regionIds, regions } = buildRegions(cleanedColorIds, columns, rows);
   markPlayableRegions(regions, columns);
+  const playablePalette = renumberPlayablePalette(regions, palette);
 
   return {
     columns,
     rows,
     regionIds,
     regions,
-    palette,
+    palette: playablePalette,
   };
 }
 
@@ -280,6 +281,29 @@ function markPlayableRegions(regions: ColourRegion[], columns: number) {
       placedLabels.push({ x: region.center.x, y: region.center.y });
     }
   }
+}
+
+function renumberPlayablePalette(regions: ColourRegion[], palette: PaletteColor[]) {
+  const playableColorIds = new Set(regions.filter((region) => region.isPlayable).map((region) => region.colorId));
+  const orderedPlayableColors = palette.filter((color) => playableColorIds.has(color.id));
+
+  if (orderedPlayableColors.length === 0) {
+    return palette;
+  }
+
+  const nextColorIds = new Map(orderedPlayableColors.map((color, index) => [color.id, index + 1]));
+
+  for (const region of regions) {
+    const nextColorId = nextColorIds.get(region.colorId);
+    if (nextColorId) {
+      region.colorId = nextColorId;
+    }
+  }
+
+  return orderedPlayableColors.map((color, index) => ({
+    ...color,
+    id: index + 1,
+  }));
 }
 
 function mergeTinyRegions(colorIds: number[], columns: number, rows: number) {

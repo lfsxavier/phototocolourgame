@@ -290,7 +290,7 @@ export function App() {
     setOriginalPhoto(null);
     setPuzzle(project.puzzle);
     setFilledRegions(new Set(project.filledRegions ?? []));
-    setSelectedColorId(project.puzzle.palette[0]?.id ?? null);
+    setSelectedColorId(project.puzzle.regions.find((region) => region.isPlayable)?.colorId ?? project.puzzle.palette[0]?.id ?? null);
     setStatus(`${project.title} loaded.`);
   }
 
@@ -390,9 +390,6 @@ export function App() {
           <button type="button" disabled={!puzzle} onClick={exportImage}>
             Export picture
           </button>
-          <button className="secondary" type="button" disabled={!puzzle || filledRegions.size === 0} onClick={clearAll}>
-            Clear all
-          </button>
         </div>
         {aiError && <p className="error-banner">{aiError}</p>}
         {showCelebration && (
@@ -409,9 +406,6 @@ export function App() {
             <span>The picture is complete.</span>
             <button type="button" onClick={() => setShowBeforeAfter(true)}>
               Before / after
-            </button>
-            <button type="button" onClick={() => setShowCelebration(false)}>
-              Keep colouring
             </button>
           </div>
         )}
@@ -456,6 +450,11 @@ export function App() {
             )}
           </div>
           {selectedColor && <p className="hint">Selected: number {selectedColor.id}</p>}
+          {puzzle && (
+            <button className="palette-clear" type="button" disabled={filledRegions.size === 0} onClick={clearAll}>
+              Clear all
+            </button>
+          )}
         </section>
 
         <section>

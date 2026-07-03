@@ -288,10 +288,6 @@ h2 {
   margin-top: 4px;
 }
 
-.complete-banner button + button {
-  background: #24262b;
-}
-
 .compare-panel {
   background: #ffffff;
   border: 1px solid rgba(36, 38, 43, 0.12);
@@ -460,6 +456,14 @@ h2 {
 
 .hint {
   margin-top: 10px;
+}
+
+.palette-clear {
+  background: #ffffff;
+  border: 1px solid rgba(36, 38, 43, 0.16);
+  color: #24262b;
+  margin-top: 12px;
+  width: 100%;
 }
 
 .status {
